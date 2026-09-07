@@ -323,6 +323,7 @@ Always-on, in `.claude/settings.json`:
 | Cursor | `adapters/cursor-receipts.mdc` | `.cursor/rules/receipts.mdc` |
 | Windsurf | `adapters/windsurfrules.txt` | `.windsurfrules` |
 | GitHub Copilot | `adapters/copilot-instructions.md` | `.github/copilot-instructions.md` |
+| Continue | `adapters/continue-receipts.md` | `.continue/rules/receipts.md` |
 | Gemini CLI | `adapters/GEMINI.md` | `GEMINI.md` |
 | opencode | `adapters/opencode.json` | merge into `opencode.json` |
 

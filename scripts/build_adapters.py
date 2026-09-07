@@ -63,6 +63,15 @@ def main() -> int:
     # GitHub Copilot
     write("copilot-instructions.md", f"{BANNER}\n\n{b}")
 
+    # Continue (markdown rule with always-on frontmatter)
+    write(
+        "continue-receipts.md",
+        "---\n"
+        "name: Receipts - no claim without the receipt\n"
+        "alwaysApply: true\n"
+        f"---\n\n{b}",
+    )
+
     # Gemini CLI
     write("GEMINI.md", f"{BANNER}\n\n{b}")
 
@@ -78,7 +87,7 @@ def main() -> int:
         ),
     )
 
-    print("done. 6 adapters generated.")
+    print("done. 7 adapters generated.")
     return 0
 
 

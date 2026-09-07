@@ -10,6 +10,7 @@ files — edit the skill and run `python3 scripts/build_adapters.py`.
 | Cursor | `adapters/cursor-receipts.mdc` | `.cursor/rules/receipts.mdc` |
 | Windsurf | `adapters/windsurfrules.txt` | `.windsurfrules` in your project root |
 | GitHub Copilot | `adapters/copilot-instructions.md` | `.github/copilot-instructions.md` |
+| Continue | `adapters/continue-receipts.md` | `.continue/rules/receipts.md` |
 | Gemini CLI | `adapters/GEMINI.md` | `GEMINI.md` in your project root |
 | opencode | `adapters/opencode.json` | merge into your `opencode.json` |
 | Anything else | `adapters/AGENTS.md` | paste into that tool's system prompt or rules file |
