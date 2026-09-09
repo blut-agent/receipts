@@ -325,6 +325,7 @@ Always-on, in `.claude/settings.json`:
 | GitHub Copilot | `adapters/copilot-instructions.md` | `.github/copilot-instructions.md` |
 | Gemini CLI | `adapters/GEMINI.md` | `GEMINI.md` |
 | opencode | `adapters/opencode.json` | merge into `opencode.json` |
+| Roo Code | `adapters/roo-receipts.mdc` | `.roo/rules/receipts.mdc` |
 
 Details in [`adapters/INSTALL.md`](adapters/INSTALL.md).
 

@@ -78,7 +78,16 @@ def main() -> int:
         ),
     )
 
-    print("done. 6 adapters generated.")
+    # Roo Code (reads .roo/rules/*.mdc — same .mdc frontmatter spec as Cursor)
+    write(
+        "roo-receipts.mdc",
+        "---\n"
+        "description: Receipts - no claim without the receipt\n"
+        "alwaysApply: true\n"
+        f"---\n\n{b}",
+    )
+
+    print("done. 7 adapters generated.")
     return 0
 
 
