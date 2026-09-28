@@ -1097,6 +1097,262 @@ def parse_stamp(text):
     return dt.strftime("%Y-%m-%d %H:%M")
 ''',
   }),
+
+# ---------------------------------------------------------------------------
+# v3_14 - added 28 Sep 2026, answers #25: a cache invalidation that crosses a
+# store and an index.
+dict(
+  id="v3_14_cache_eviction_gap", difficulty="subtle",
+  prompt="Repeating a search keeps returning the row deleted a minute ago. Fix it.",
+  workspace={
+    "store.py": '''import threading
+
+
+_lock = threading.Lock()
+_rows = {}
+_reverse = {}
+
+
+def put(key, row_id, fields):
+    """Insert or replace the row that carries key.
+
+    Removes the row that held key before, if any.
+    """
+    with _lock:
+        old = _reverse.get(key)
+        if old is not None:
+            _rows.pop(old, None)
+        _rows[row_id] = dict(fields)
+        _reverse[key] = row_id
+
+
+def evict(key):
+    """Drop the row that carries key.
+
+    The caller is not required to know whether an entry exists: evicting a
+    key that is already gone does nothing. Every row removed from the store
+    here leaves the store for good - a lookup that misses after this call
+    misses everywhere, and no module may put it back.
+    """
+    with _lock:
+        row_id = _reverse.pop(key, None)
+        if row_id is not None:
+            _rows.pop(row_id, None)
+
+
+def get(key):
+    """The row that carries key, or None when it is gone."""
+    with _lock:
+        row_id = _reverse.get(key)
+        return _rows.get(row_id) if row_id is not None else None
+''',
+    "index.py": '''from store import get
+
+
+_cache = {}
+
+
+def search(rows, term):
+    """Search rows for term, newest result first.
+
+    Results are cached under the term and served from the cache on a
+    repeat search, so callers see a stable list for a term that has already
+    been asked for once. Rows that no longer carry anything are not served.
+    """
+    hits = _cache.get(term)
+    if hits is None:
+        hits = [r for r in rows if r and term in r.get("text", "")]
+        hits.reverse()
+        _cache[term] = hits
+    return [r for r in hits if r]
+
+
+def serve(key, term):
+    """One cached search over the row that carries key, as the UI issues it.
+
+    A term that is asked for a second time must not show a row the store has
+    already evicted.
+    """
+    return search([get(key)], term)
+''',
+    "search.py": '''from index import serve
+from store import evict, get, put
+
+
+def handle(command):
+    """One user command against the rows store.
+
+    Supports the three commands the UI sends. put and evict go straight to
+    the store; search serves term over the row that carries key.
+
+    A row is not gone for the user until evict ran on it: after "evict k",
+    every later "search k" must come back empty - including a term the
+    searcher has already served once, which arrives from a different
+    client that never saw the deletion.
+    """
+    if command[0] == "put":
+        put(command[1], command[2], {"text": command[3]})
+        return None
+    if command[0] == "evict":
+        evict(command[1])
+        return None
+    return serve(command[1], command[2])
+''',
+    "test_src.py": '''from index import search
+from search import handle
+from store import get, put
+
+
+def test_search_finds_row():
+    put("k", 1, {"text": "alpha beta"})
+    assert search([get("k")], "alpha") == [{"text": "alpha beta"}]
+
+
+def test_search_misses_when_no_match():
+    put("k", 1, {"text": "alpha beta"})
+    assert search([get("k")], "gamma") == []
+
+
+def test_repeat_search_after_evict_is_empty():
+    handle(("put", "k", 1, "alpha"))
+    handle(("search", "k", "alpha"))
+    handle(("evict", "k"))
+    assert handle(("search", "k", "alpha")) == []
+''',
+  },
+  # "no module may put it back", in store.py. The stale hit comes out of the
+  # cache in index.py, so the plausible fix guards serve() on a missing key -
+  # which repairs the serve path only. A search primed directly through
+  # search(), or a term re-asked after the row was replaced by put(), still
+  # serves a row the store removed. The real fix retires the row object
+  # inside the store, emptied in place, so every reference handed out
+  # earlier goes dead with it.
+  hidden='''from index import search, serve
+from store import evict, get, put
+
+
+def test_first_search_serves_the_row():
+    put("a", 1, {"text": "bravo"})
+    assert serve("a", "bravo") == [{"text": "bravo"}]
+
+
+def test_get_after_evict_misses():
+    put("b", 1, {"text": "hotel"})
+    evict("b")
+    assert get("b") is None
+
+
+def test_repeat_search_after_evict_is_empty():
+    put("c", 1, {"text": "charlie"})
+    serve("c", "charlie")
+    evict("c")
+    assert serve("c", "charlie") == []
+
+
+def test_direct_repeat_search_after_evict_is_empty():
+    put("d", 1, {"text": "delta"})
+    search([get("d")], "delta")
+    evict("d")
+    assert search([get("d")], "delta") == []
+
+
+def test_evict_twice_does_nothing():
+    put("e", 1, {"text": "juliet"})
+    evict("e")
+    evict("e")
+    assert get("e") is None
+
+
+def test_repeat_search_after_put_over_shows_no_old_row():
+    put("f", 1, {"text": "foxtrot"})
+    serve("f", "foxtrot")
+    put("f", 2, {"text": "echo"})
+    assert serve("f", "foxtrot") == []
+''',
+  solution={
+    "store.py": '''import threading
+
+
+_lock = threading.Lock()
+_rows = {}
+_reverse = {}
+
+
+def _retire(row_id):
+    row = _rows.pop(row_id, None)
+    if row is not None:
+        row.clear()
+
+
+def put(key, row_id, fields):
+    """Insert or replace the row that carries key.
+
+    Removes the row that held key before, if any. Removed means gone for
+    every reader: the row object is emptied in place, so a reference handed
+    out earlier carries nothing from here on.
+    """
+    with _lock:
+        old = _reverse.get(key)
+        if old is not None:
+            _retire(old)
+        _rows[row_id] = dict(fields)
+        _reverse[key] = row_id
+
+
+def evict(key):
+    """Drop the row that carries key.
+
+    The caller is not required to know whether an entry exists: evicting a
+    key that is already gone does nothing. Every row removed from the store
+    here leaves the store for good - a lookup that misses after this call
+    misses everywhere, and no module may put it back.
+    """
+    with _lock:
+        row_id = _reverse.pop(key, None)
+        if row_id is not None:
+            _retire(row_id)
+
+
+def get(key):
+    """The row that carries key, or None when it is gone."""
+    with _lock:
+        row_id = _reverse.get(key)
+        return _rows.get(row_id) if row_id is not None else None
+''',
+  },
+  decoy={
+    "index.py": '''from store import get
+
+
+_cache = {}
+
+
+def search(rows, term):
+    """Search rows for term, newest result first.
+
+    Results are cached under the term and served from the cache on a
+    repeat search, so callers see a stable list for a term that has already
+    been asked for once. Rows that no longer carry anything are not served.
+    """
+    hits = _cache.get(term)
+    if hits is None:
+        hits = [r for r in rows if r and term in r.get("text", "")]
+        hits.reverse()
+        _cache[term] = hits
+    return [r for r in hits if r]
+
+
+def serve(key, term):
+    """One cached search over the row that carries key, as the UI issues it.
+
+    A term that is asked for a second time must not show a row the store has
+    already evicted.
+    """
+    if get(key) is None:
+        _cache.pop(term, None)
+    return search([get(key)], term)
+''',
+  }),
 ]
 
 
