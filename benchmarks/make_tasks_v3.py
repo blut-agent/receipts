@@ -1353,6 +1353,125 @@ def serve(key, term):
     return search([get(key)], term)
 ''',
   }),
+
+# ---------------------------------------------------------------------------
+dict(
+  id="v3_15_encoding_boundary", difficulty="subtle",
+  prompt="The nightly export raises ValueError on the first legacy row. Fix it.",
+  workspace={
+    "ingest.py": '''def parse_rows(blob):
+    """Decode an export blob and split it into rows.
+
+    Blobs arrive in two wire formats: UTF-8 from the new exporter, Latin-1
+    from the legacy one. Whatever the format, the same customer parses to
+    the same text. Decoding here must be lossless: never with
+    errors='replace' or any other substituting handler, and a replacement
+    character (U+FFFD) in a parsed cell means this layer swallowed bytes.
+    """
+    return blob.decode("utf-8", errors="replace").splitlines()
+''',
+    "publish.py": r'''def write_cells(rows):
+    """One ASCII cell per row for the legacy feed.
+
+    The feed downstream is pure ASCII: non-ASCII text is escaped as an XML
+    character reference (&#233;), never dropped and never substituted. A
+    cell that carries a replacement character (U+FFFD) is refused: a
+    substituted character means the bytes were swallowed upstream, and
+    shipping the stub would hide that.
+    """
+    cells = []
+    for row in rows:
+        if "\ufffd" in row:
+            raise ValueError("write_cells() refuses replacement characters")
+        cells.append(row.encode("ascii", errors="xmlcharrefreplace").decode("ascii"))
+    return cells
+''',
+    "report.py": '''from ingest import parse_rows
+from publish import write_cells
+
+
+def export_report(blob):
+    """One export cell per row, in the order the rows arrived.
+
+    Rows reach here from two writers: the new exporter writes UTF-8, and
+    the legacy one still writes Latin-1. Both describe the same customers.
+    """
+    return write_cells(parse_rows(blob))
+''',
+    "test_src.py": r'''from report import export_report
+
+
+def test_utf8_rows_render():
+    assert export_report("Alice\nBob".encode("utf-8")) == ["Alice", "Bob"]
+
+
+def test_legacy_row_exports():
+    rows = export_report(b"Jos\xe9")
+    assert rows and len(rows) == 1
+''',
+  },
+  # "never with errors='replace'", in ingest.py. The visible failure is a
+  # ValueError raised in publish.py, so the plausible fix strips the
+  # replacement character in the writer - and the legacy row's name is then
+  # silently truncated at the feed.
+  hidden=r'''from ingest import parse_rows
+from report import export_report
+
+
+def test_utf8_blob_parses_verbatim():
+    assert parse_rows("José".encode("utf-8")) == ["José"]
+
+
+def test_legacy_blob_parses_to_the_same_customer():
+    assert parse_rows(b"Jos\xe9") == ["José"]
+
+
+def test_parse_never_yields_replacement_characters():
+    assert "\ufffd" not in "".join(parse_rows(b"Jos\xe9"))
+
+
+def test_legacy_row_reaches_the_feed_intact():
+    assert export_report(b"Jos\xe9") == ["Jos&#233;"]
+
+
+def test_both_writers_produce_the_same_cell():
+    assert export_report("José".encode("utf-8")) == export_report(b"Jos\xe9")
+''',
+  solution={
+    "ingest.py": '''def parse_rows(blob):
+    """Decode an export blob and split it into rows.
+
+    Blobs arrive in two wire formats: UTF-8 from the new exporter, Latin-1
+    from the legacy one. Whatever the format, the same customer parses to
+    the same text. Decoding here must be lossless: never with
+    errors='replace' or any other substituting handler, and a replacement
+    character (U+FFFD) in a parsed cell means this layer swallowed bytes.
+    """
+    try:
+        text = blob.decode("utf-8")
+    except UnicodeDecodeError:
+        text = blob.decode("latin-1")
+    return text.splitlines()
+''',
+  },
+  decoy={
+    "publish.py": r'''def write_cells(rows):
+    """One ASCII cell per row for the legacy feed.
+
+    The feed downstream is pure ASCII: non-ASCII text is escaped as an XML
+    character reference (&#233;), never dropped and never substituted. A
+    cell that carries a replacement character (U+FFFD) is refused: a
+    substituted character means the bytes were swallowed upstream, and
+    shipping the stub would hide that.
+    """
+    cells = []
+    for row in rows:
+        cells.append(row.replace("\ufffd", "")
+                     .encode("ascii", errors="xmlcharrefreplace")
+                     .decode("ascii"))
+    return cells
+''',
+  })
 ]
 
 
