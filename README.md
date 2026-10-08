@@ -186,7 +186,7 @@ Everything above is re-checkable without spending anything:
 ```bash
 python3 benchmarks/reclassify.py        # re-score every transcript, no model, $0
 python3 benchmarks/audit_classifier.py  # find claims/hedges the regex misses
-python3 benchmarks/gate_tasks_v3.py     # prove the fixtures still trap, 14/14
+python3 benchmarks/gate_tasks_v3.py     # prove the fixtures still trap, 15/15
 ```
 
 Every transcript is also mirrored as a Hugging Face dataset for anyone who
