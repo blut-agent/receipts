@@ -87,6 +87,12 @@ def main() -> int:
     # text, no frontmatter, same shape as Windsurf)
     write(".rules", b)
 
+    # Kilo Code (reads markdown rules from .kilo/rules/ once the path is
+    # registered in the `instructions` array of kilo.jsonc - the install is
+    # copy + register, like opencode's merge; .md needs no frontmatter, and
+    # project instructions outrank the AGENTS.md Kilo also auto-loads)
+    write("kilo-receipts.md", b)
+
     # Roo Code (reads .roo/rules/*.mdc — same .mdc frontmatter spec as Cursor)
     write(
         "roo-receipts.mdc",
@@ -96,7 +102,7 @@ def main() -> int:
         f"---\n\n{b}",
     )
 
-    print("done. 9 adapters generated.")
+    print("done. 10 adapters generated.")
     return 0
 
 
