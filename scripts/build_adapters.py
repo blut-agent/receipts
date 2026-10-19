@@ -102,7 +102,12 @@ def main() -> int:
         f"---\n\n{b}",
     )
 
-    print("done. 10 adapters generated.")
+    # Aider (adds the files listed under `read:` in .aider.conf.yml to the chat
+    # as read-only context - config lives at the git root, cwd, or home; plain
+    # markdown, no frontmatter, same shape as the Windsurf/Zed rules files)
+    write("aider-receipts.md", b)
+
+    print("done. 11 adapters generated.")
     return 0
 
 
